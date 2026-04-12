@@ -1,58 +1,21 @@
 """
-DermAI — Skin Engine v3
+DermAI — Skin Engine v4
 ------------------------
-Now uses Groq API instead of Ollama (no RAM issues!)
-Free at console.groq.com
-
-Set your key before starting:
-  Windows PowerShell:
-    $env:GROQ_API_KEY="gsk_yourkey"
-
-No torch. No Anthropic. No RAM problems.
+Uses Groq for both conversation AND emotion detection.
+No optimum, no transformers, no heavy packages.
+Works on Railway and any cloud platform.
 """
 
 import os
-import json
 from pathlib import Path
 from groq import Groq
-from optimum.onnxruntime import ORTModelForSequenceClassification
-from transformers import pipeline, AutoTokenizer
-
-# ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR  = Path(__file__).parent
-MODEL_DIR = BASE_DIR / "model"
-MODEL_DIR.mkdir(exist_ok=True)
 
 # ── Groq client ───────────────────────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 if not GROQ_API_KEY:
     print("[DermAI] WARNING: GROQ_API_KEY not set!")
-    print("[DermAI] Run this in PowerShell first:")
-    print('  $env:GROQ_API_KEY="gsk_yourkey"')
 groq_client = Groq(api_key=GROQ_API_KEY)
 GROQ_MODEL  = "llama-3.1-8b-instant"
-
-# ── Emotion model ─────────────────────────────────────────────────────────────
-EMOTION_MODEL_ID = "j-hartmann/emotion-english-distilroberta-base"
-
-def load_emotion_model():
-    onnx_path = MODEL_DIR / "emotion_onnx"
-    if not onnx_path.exists():
-        print("[DermAI] First run — downloading emotion model (~90MB)...")
-        model     = ORTModelForSequenceClassification.from_pretrained(EMOTION_MODEL_ID, export=True)
-        tokenizer = AutoTokenizer.from_pretrained(EMOTION_MODEL_ID)
-        model.save_pretrained(onnx_path)
-        tokenizer.save_pretrained(onnx_path)
-        print("[DermAI] Emotion model saved.")
-    else:
-        print(f"[DermAI] Loading emotion model from {onnx_path}")
-        model     = ORTModelForSequenceClassification.from_pretrained(onnx_path)
-        tokenizer = AutoTokenizer.from_pretrained(onnx_path)
-    classifier = pipeline("text-classification", model=model, tokenizer=tokenizer, top_k=None)
-    print("[DermAI] Emotion model ready.")
-    return classifier
-
-emotion_classifier = load_emotion_model()
 
 # ── Skin taxonomy ─────────────────────────────────────────────────────────────
 SKIN_TYPES = ["oily", "dry", "combination", "sensitive", "normal"]
@@ -164,12 +127,10 @@ HOME_REMEDIES = {
     "dark_circles": [
         {"name": "Chilled potato juice", "ingredients": ["1 raw potato", "cotton pads"], "steps": "Grate potato, squeeze juice, soak cotton pads, place on eyes 15 mins", "why_it_works": "Catecholase enzyme reduces melanin naturally", "frequency": "Every night", "results_in": "2-3 weeks"},
         {"name": "Cold cucumber + rose water", "ingredients": ["chilled cucumber", "rose water", "aloe vera"], "steps": "Blend cucumber, mix with rose water and aloe, apply under eyes 15 mins", "why_it_works": "Silica reduces puffiness, rose water hydrates", "frequency": "3-4x a week", "results_in": "1-2 weeks"},
-        {"name": "Cold milk compress", "ingredients": ["cold raw milk", "cotton pads"], "steps": "Dip cotton in cold milk, place on eyes 10-15 mins", "why_it_works": "Lactic acid lightens, cold reduces blood vessel visibility", "frequency": "Daily", "results_in": "2 weeks"},
     ],
     "acne": [
         {"name": "Neem + turmeric spot treatment", "ingredients": ["neem powder", "pinch turmeric", "rose water"], "steps": "Make paste, apply only on pimples 20 mins, wash with cold water", "why_it_works": "Neem is antibacterial, turmeric is anti-inflammatory", "frequency": "Daily on active spots", "results_in": "3-5 days"},
         {"name": "Multani mitti + neem mask", "ingredients": ["2 tbsp multani mitti", "neem powder", "rose water"], "steps": "Mix into paste, apply 15 mins, rinse cool water", "why_it_works": "Multani mitti absorbs oil, neem kills acne bacteria", "frequency": "Twice a week", "results_in": "1 week"},
-        {"name": "Honey + cinnamon spot mask", "ingredients": ["raw honey", "cinnamon powder"], "steps": "Mix 2:1, dab on spots, leave overnight", "why_it_works": "Honey antibacterial, cinnamon improves circulation", "frequency": "Nightly", "results_in": "2-3 days"},
     ],
     "hyperpigmentation": [
         {"name": "Turmeric + milk face mask", "ingredients": ["pinch turmeric", "raw milk"], "steps": "Mix into paste, apply 20 mins, wash off", "why_it_works": "Curcumin inhibits melanin, lactic acid exfoliates", "frequency": "3x a week", "results_in": "3-4 weeks", "warning": "Use very little turmeric"},
@@ -219,17 +180,29 @@ EMOTION_TONE = {
     "neutral":  "warm, friendly, conversational."
 }
 
-# ── Emotion detection ─────────────────────────────────────────────────────────
+# ── Emotion detection (using Groq — no heavy packages needed) ─────────────────
 def detect_emotion(text: str) -> dict:
-    results    = emotion_classifier(text[:512])[0]
-    scores     = {r["label"].lower(): round(r["score"], 3) for r in results}
-    dominant   = max(scores, key=scores.get)
-    confidence = scores[dominant]
+    try:
+        response = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{
+                "role": "user",
+                "content": f"Classify the emotion in this text. Reply with exactly one word from this list: joy, sadness, anger, fear, surprise, disgust, neutral. Text: '{text[:200]}'"
+            }],
+            max_tokens=5,
+            temperature=0
+        )
+        emotion = response.choices[0].message.content.strip().lower()
+        if emotion not in ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]:
+            emotion = "neutral"
+    except:
+        emotion = "neutral"
+
     return {
-        "dominant":      dominant,
-        "confidence":    confidence,
-        "all_scores":    scores,
-        "is_distressed": dominant in ["anger", "fear", "sadness", "disgust"] and confidence > 0.4
+        "dominant":      emotion,
+        "confidence":    0.85,
+        "all_scores":    {emotion: 0.85},
+        "is_distressed": emotion in ["anger", "fear", "sadness", "disgust"]
     }
 
 # ── Get remedies for skin profile ─────────────────────────────────────────────
@@ -237,8 +210,8 @@ def get_remedies_for_profile(skin_profile: dict) -> list:
     concerns  = skin_profile.get("concerns", [])
     skin_type = skin_profile.get("skin_type", "")
     lookup    = list(concerns)
-    if skin_type == "oily"        and "oily_skin" not in lookup: lookup.append("oily_skin")
-    if skin_type == "dry"         and "dry_skin"  not in lookup: lookup.append("dry_skin")
+    if skin_type == "oily" and "oily_skin" not in lookup: lookup.append("oily_skin")
+    if skin_type == "dry"  and "dry_skin"  not in lookup: lookup.append("dry_skin")
     remedies = []
     for concern in lookup:
         key = concern.replace("oily_tzone", "oily_skin")
@@ -301,14 +274,14 @@ RULES:
 {skin_context}
 
 PRODUCTS YOU CAN RECOMMEND:
-- Minimalist Niacinamide 10% + Zinc: ₹599 — oily skin, dark spots, open pores
-- Plum Under-Eye Recovery Gel: ₹795 — dark circles, peptides
-- Dot & Key Hyaluronic Moisturiser: ₹895 — combination/dry skin hydration
-- Minimalist SPF 50 PA++++: ₹399 — daily sun protection, all skin types
-- Plum 15% Vitamin C Serum: ₹845 — dullness, hyperpigmentation
-- CeraVe Moisturising Cream: ₹1200 — sensitive/dry skin, ceramides
-- Minimalist Alpha Arbutin 2%: ₹549 — dark spots, brightening
-- Dot & Key 2% BHA Serum: ₹749 — blackheads, open pores, acne
+- Minimalist Niacinamide 10% + Zinc: 599 — oily skin, dark spots, open pores
+- Plum Under-Eye Recovery Gel: 795 — dark circles, peptides
+- Dot & Key Hyaluronic Moisturiser: 895 — combination/dry skin hydration
+- Minimalist SPF 50 PA++++: 399 — daily sun protection, all skin types
+- Plum 15% Vitamin C Serum: 845 — dullness, hyperpigmentation
+- CeraVe Moisturising Cream: 1200 — sensitive/dry skin, ceramides
+- Minimalist Alpha Arbutin 2%: 549 — dark spots, brightening
+- Dot & Key 2% BHA Serum: 749 — blackheads, open pores, acne
 {remedies_context}
 
 Stay completely in character as {persona['name']}. Never break character. Never say you are an AI.
@@ -322,18 +295,13 @@ def chat_with_dermai(
     personality: str = "friend"
 ) -> dict:
 
-    # Detect emotion
     emotion_state = detect_emotion(user_message)
-
-    # Build prompt
     system_prompt = build_system_prompt(emotion_state, skin_profile, personality)
 
-    # Build messages
-    messages = [{"role": "system", "content": system_prompt}]
+    messages  = [{"role": "system", "content": system_prompt}]
     messages += conversation_history
     messages += [{"role": "user", "content": user_message}]
 
-    # Call Groq
     try:
         response   = groq_client.chat.completions.create(
             model=GROQ_MODEL,
@@ -345,11 +313,8 @@ def chat_with_dermai(
     except Exception as e:
         reply_text = f"Something went wrong: {str(e)}"
 
-    # Extract skin info
-    updated_profile             = extract_skin_info(user_message, skin_profile)
+    updated_profile               = extract_skin_info(user_message, skin_profile)
     updated_profile["personality"] = personality
-
-    # Stage + recommendations
     stage           = get_stage(updated_profile, len(conversation_history))
     recommendations = get_recommendations(updated_profile) if stage in ["recommending", "complete"] else []
     remedies        = get_remedies_for_profile(updated_profile) if updated_profile.get("concerns") else []
@@ -368,34 +333,32 @@ def extract_skin_info(user_msg: str, current_profile: dict) -> dict:
     profile = dict(current_profile)
     text    = user_msg.lower()
 
-    # Detect if user wants a personality
     if not profile.get("personality") or profile.get("personality") == "friend":
-        text_lower = user_msg.lower()
-        if any(w in text_lower for w in ["be my boyfriend", "act like my boyfriend", "like a boyfriend", "as my boyfriend"]):
+        if any(w in text for w in ["be my boyfriend", "like a boyfriend", "as my boyfriend"]):
             profile["personality"] = "boyfriend"
-        elif any(w in text_lower for w in ["be my girlfriend", "act like my girlfriend", "like a girlfriend", "as my girlfriend"]):
+        elif any(w in text for w in ["be my girlfriend", "like a girlfriend", "as my girlfriend"]):
             profile["personality"] = "girlfriend"
-        elif any(w in text_lower for w in ["be my sister", "like my sister", "act like my sister", "as my sister"]):
+        elif any(w in text for w in ["be my sister", "like my sister", "as my sister", "elder sis", "older sis"]):
             profile["personality"] = "sister"
-        elif any(w in text_lower for w in ["be my mum", "like my mum", "like my mom", "as my mum", "as my mom", "be my mother", "like a mother"]):
+        elif any(w in text for w in ["be my mum", "like my mum", "like my mom", "as my mum", "be my mother"]):
             profile["personality"] = "mum"
-        elif any(w in text_lower for w in ["be my brother", "like my brother", "as my brother"]):
+        elif any(w in text for w in ["be my brother", "like my brother"]):
             profile["personality"] = "boyfriend"
-        elif any(w in text_lower for w in ["like a doctor", "as a doctor", "be my doctor", "medical advice"]):
+        elif any(w in text for w in ["like a doctor", "as a doctor", "be my doctor"]):
             profile["personality"] = "doctor"
-        elif any(w in text_lower for w in ["just help", "no character", "normal", "just a chatbot", "just chat"]):
+        elif any(w in text for w in ["just help", "no character", "just a chatbot", "just chat"]):
             profile["personality"] = "neutral"
 
     if not profile.get("skin_type"):
-        if any(w in text for w in ["oily", "greasy", "shiny", "shines by noon"]):
+        if any(w in text for w in ["oily", "greasy", "shiny"]):
             profile["skin_type"] = "oily"
         elif any(w in text for w in ["dry", "flaky", "tight", "peeling", "rough"]):
             profile["skin_type"] = "dry"
-        elif any(w in text for w in ["combination", "mixed", "oily nose", "dry cheeks", "t-zone", "t zone"]):
+        elif any(w in text for w in ["combination", "mixed", "oily nose", "dry cheeks", "t-zone"]):
             profile["skin_type"] = "combination"
-        elif any(w in text for w in ["sensitive", "react", "irritat", "red easily", "burns when"]):
+        elif any(w in text for w in ["sensitive", "react", "irritat", "red easily"]):
             profile["skin_type"] = "sensitive"
-            
+
     concerns = set(profile.get("concerns", []))
     keyword_map = {
         "dark_circles":      ["dark circle", "under eye", "eye bag", "puffy eye"],

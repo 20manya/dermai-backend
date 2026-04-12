@@ -1,0 +1,235 @@
+# DermAI — Complete Windows Setup Guide
+# Emotion-aware skincare AI, no Anthropic, no torch
+
+─────────────────────────────────────────────────────────────────────────────
+WHAT YOU'RE INSTALLING
+─────────────────────────────────────────────────────────────────────────────
+
+  Python         — runs your code
+  Ollama         — runs Llama 3 AI locally on your PC (free, private)
+  Llama 3        — the AI brain (4.7GB, downloads once)
+  Emotion model  — detects user feelings from text (~90MB, downloads once)
+  FastAPI        — the web server your frontend talks to
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 1 — Install Python (if you don't have it)
+─────────────────────────────────────────────────────────────────────────────
+
+  1. Go to: https://www.python.org/downloads/
+  2. Click "Download Python 3.11" (or any 3.10+ version)
+  3. Run the installer
+  4. IMPORTANT: Check the box that says "Add Python to PATH"
+  5. Click Install Now
+
+  To verify it worked:
+    - Press Windows key + R
+    - Type: cmd
+    - Press Enter
+    - Type: python --version
+    - You should see: Python 3.11.x
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 2 — Install Ollama
+─────────────────────────────────────────────────────────────────────────────
+
+  1. Go to: https://ollama.com/download
+  2. Click "Download for Windows"
+  3. Run OllamaSetup.exe
+  4. Ollama installs silently — you'll see an icon in your system tray
+
+  To verify it worked:
+    - Open Command Prompt (Windows + R → cmd → Enter)
+    - Type: ollama --version
+    - You should see: ollama version 0.x.x
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 3 — Create the project folder
+─────────────────────────────────────────────────────────────────────────────
+
+  1. Open File Explorer
+  2. Go to: C:\Users\YourName\
+     (replace YourName with your actual Windows username)
+  3. Create a new folder called: dermai
+     Right-click → New → Folder → name it "dermai"
+
+  Your folder path will be: C:\Users\YourName\dermai\
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 4 — Copy the project files
+─────────────────────────────────────────────────────────────────────────────
+
+  Copy these 4 files into C:\Users\YourName\dermai\:
+
+    skin_engine.py      ← emotion detection + AI conversation logic
+    api_server.py       ← web server your frontend calls
+    requirements.txt    ← list of Python packages to install
+    start.bat           ← double-click to start everything
+
+  After copying, your folder should look like:
+
+    dermai/
+    ├── skin_engine.py
+    ├── api_server.py
+    ├── requirements.txt
+    └── start.bat
+
+  The "model" folder will be created automatically on first run.
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 5 — First-time setup (run once)
+─────────────────────────────────────────────────────────────────────────────
+
+  1. Open Command Prompt as Administrator:
+     - Press Windows key
+     - Type: cmd
+     - Right-click "Command Prompt" → "Run as administrator"
+
+  2. Navigate to your dermai folder:
+     Type exactly:
+       cd C:\Users\YourName\dermai
+     (replace YourName with your actual username)
+
+  3. Install Python packages:
+     Type:
+       pip install -r requirements.txt
+
+     This will take 2–5 minutes. You'll see lots of text scrolling.
+     Wait until you see the cursor return (C:\Users\YourName\dermai>)
+
+  4. Download Llama 3 (4.7GB — do this on WiFi):
+     Type:
+       ollama pull llama3
+
+     This will show a progress bar. Takes 10–30 minutes depending on internet.
+     Only happens ONCE. After this it's stored on your PC forever.
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 6 — Start DermAI (every time you want to use it)
+─────────────────────────────────────────────────────────────────────────────
+
+  OPTION A (easiest):
+    Go to C:\Users\YourName\dermai\
+    Double-click start.bat
+    A terminal window opens — wait for "Application startup complete"
+
+  OPTION B (manual, from Command Prompt):
+    cd C:\Users\YourName\dermai
+    ollama serve           ← start AI engine (leave this window open)
+    (open a NEW Command Prompt window)
+    cd C:\Users\YourName\dermai
+    uvicorn api_server:app --reload --port 8000
+
+  When running, you'll see:
+    INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+    INFO:     Application startup complete.
+
+
+─────────────────────────────────────────────────────────────────────────────
+STEP 7 — Test it's working
+─────────────────────────────────────────────────────────────────────────────
+
+  Open your browser and go to:
+    http://localhost:8000/health
+
+  You should see something like:
+    {
+      "status": "ok",
+      "ollama": "connected",
+      "llama3": "ready"
+    }
+
+  To see all available API endpoints:
+    http://localhost:8000/docs
+    (This is an interactive API explorer — you can test calls here)
+
+  To test a chat message:
+    http://localhost:8000/docs
+    → Click POST /chat → Try it out
+    → Enter: { "session_id": "test123", "message": "my skin is so oily i hate it" }
+    → Click Execute
+    → You'll see the AI response + detected emotion
+
+
+─────────────────────────────────────────────────────────────────────────────
+WHERE FILES ARE STORED
+─────────────────────────────────────────────────────────────────────────────
+
+  Your code:
+    C:\Users\YourName\dermai\
+
+  Emotion AI model (auto-downloaded on first run):
+    C:\Users\YourName\dermai\model\emotion_onnx\
+
+  Llama 3 model (downloaded by Ollama):
+    C:\Users\YourName\.ollama\models\
+    (Ollama manages this automatically — don't touch it)
+
+  Conversation sessions (stored in memory while server runs):
+    Lost when you stop the server
+    → Next step: connect to a database (SQLite or MongoDB)
+
+
+─────────────────────────────────────────────────────────────────────────────
+CALLING THE API FROM YOUR FRONTEND (JavaScript example)
+─────────────────────────────────────────────────────────────────────────────
+
+  // Send a message
+  const response = await fetch('http://localhost:8000/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: 'user_abc123',   // unique per user
+      message: 'my skin gets really oily by noon'
+    })
+  });
+
+  const data = await response.json();
+  console.log(data.reply);           // AI response text
+  console.log(data.emotion);         // { dominant: "neutral", confidence: 0.6 }
+  console.log(data.skin_profile);    // { skin_type: "oily", concerns: [...] }
+  console.log(data.recommendations); // [ { name: "Niacinamide", price: 599 } ]
+  console.log(data.stage);           // "gathering_info" | "recommending"
+
+
+─────────────────────────────────────────────────────────────────────────────
+TROUBLESHOOTING
+─────────────────────────────────────────────────────────────────────────────
+
+  Problem: "python is not recognized"
+  Fix:     Reinstall Python and check "Add Python to PATH"
+
+  Problem: "ollama is not recognized"
+  Fix:     Restart your computer after installing Ollama
+
+  Problem: "connection refused" on /health
+  Fix:     Make sure start.bat is running. Look for the terminal window.
+
+  Problem: Slow first response
+  Fix:     Normal — Llama 3 loads into memory on first call (~15 seconds)
+           After that it's fast (2–5 seconds per reply)
+
+  Problem: "No module named 'optimum'"
+  Fix:     Run: pip install -r requirements.txt again
+
+  Problem: Emotion model download fails
+  Fix:     Check internet. Run start.bat again — it resumes automatically.
+
+
+─────────────────────────────────────────────────────────────────────────────
+MINIMUM PC REQUIREMENTS
+─────────────────────────────────────────────────────────────────────────────
+
+  RAM:     8GB minimum, 16GB recommended
+  Storage: 10GB free (4.7GB Llama + 1GB emotion model + extras)
+  CPU:     Any modern i5/Ryzen 5 or better
+  GPU:     Optional — Ollama uses CPU by default, GPU makes it faster
+
+  If you have an NVIDIA GPU:
+    Ollama automatically uses it. No extra steps needed.
+    Response time drops from ~5 seconds to ~1 second.

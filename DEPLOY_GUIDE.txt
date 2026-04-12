@@ -1,0 +1,137 @@
+# DermAI — Deployment Guide
+# Deploy to Railway (free) so anyone can use your app
+
+═══════════════════════════════════════════════════════════
+STEP 1 — Copy backend files into dermai folder
+═══════════════════════════════════════════════════════════
+
+Copy these files into C:\Users\USER\Documents\dermai\:
+  - backend_server.py   ← replaces api_server.py
+  - database.py
+  - auth.py
+  - orders.py
+  - requirements.txt    ← replace the old one
+
+Your dermai folder should now have:
+  dermai/
+    backend_server.py
+    database.py
+    auth.py
+    orders.py
+    skin_engine.py      ← already there
+    requirements.txt
+    model/              ← already there
+
+
+═══════════════════════════════════════════════════════════
+STEP 2 — Test locally first
+═══════════════════════════════════════════════════════════
+
+In Antigravity terminal:
+  cd C:\Users\USER\Documents\dermai
+  $env:GROQ_API_KEY="your-groq-api-key-here"
+  $env:SECRET_KEY="dermai-super-secret-key-2024"
+  & "C:/Program Files/Python314/python.exe" -m uvicorn backend_server:app --reload --port 8000 --host 0.0.0.0
+
+Visit: http://localhost:8000
+You should see all endpoints listed.
+
+Test signup:
+  http://localhost:8000/docs
+  POST /auth/signup/email
+  {
+    "name": "Test User",
+    "email": "test@test.com",
+    "password": "password123"
+  }
+
+
+═══════════════════════════════════════════════════════════
+STEP 3 — Push to GitHub
+═══════════════════════════════════════════════════════════
+
+1. Go to github.com → sign up free
+2. Create new repository called "dermai-backend"
+3. In Antigravity terminal:
+
+  cd C:\Users\USER\Documents\dermai
+  git init
+  git add .
+  git commit -m "DermAI backend"
+  git branch -M main
+  git remote add origin https://github.com/YOURUSERNAME/dermai-backend.git
+  git push -u origin main
+
+
+═══════════════════════════════════════════════════════════
+STEP 4 — Deploy to Railway
+═══════════════════════════════════════════════════════════
+
+1. Go to railway.app → sign up with GitHub (free)
+2. Click "New Project"
+3. Click "Deploy from GitHub repo"
+4. Select "dermai-backend"
+5. Railway auto-detects Python and deploys!
+
+Set these environment variables in Railway dashboard:
+  GROQ_API_KEY     = your-groq-api-key-here
+  SECRET_KEY       = dermai-super-secret-key-2024
+  RAZORPAY_KEY_ID  = (get from razorpay.com — free account)
+  RAZORPAY_KEY_SECRET = (from razorpay.com)
+  FAST2SMS_KEY     = (get from fast2sms.com — free, 100 SMS/day)
+
+6. Railway gives you a URL like:
+   https://dermai-backend-production.up.railway.app
+
+7. Update your React Native app:
+   In index.tsx change:
+   const API = 'http://192.168.1.17:8000';
+   to:
+   const API = 'https://dermai-backend-production.up.railway.app';
+
+
+═══════════════════════════════════════════════════════════
+STEP 5 — Add PostgreSQL database on Railway
+═══════════════════════════════════════════════════════════
+
+1. In Railway project → click "New"
+2. Select "Database" → PostgreSQL
+3. Railway auto-connects it and sets DATABASE_URL
+4. Your app automatically uses PostgreSQL instead of SQLite!
+
+
+═══════════════════════════════════════════════════════════
+FREE TIER LIMITS ON RAILWAY
+═══════════════════════════════════════════════════════════
+
+  500 hours/month compute    → enough for ~20 hrs/day
+  1GB PostgreSQL storage     → enough for thousands of users
+  100GB bandwidth/month      → very generous
+
+Cost: $0 to start. Upgrade when you have real users.
+
+
+═══════════════════════════════════════════════════════════
+ENVIRONMENT VARIABLES SUMMARY
+═══════════════════════════════════════════════════════════
+
+Variable            Where to get it         Required?
+─────────────────────────────────────────────────────────
+GROQ_API_KEY        console.groq.com        YES
+SECRET_KEY          make up any string      YES
+RAZORPAY_KEY_ID     razorpay.com            For payments
+RAZORPAY_KEY_SECRET razorpay.com            For payments
+FAST2SMS_KEY        fast2sms.com            For OTP SMS
+DATABASE_URL        auto-set by Railway     Auto
+
+
+═══════════════════════════════════════════════════════════
+GETTING RAZORPAY KEYS (free test mode)
+═══════════════════════════════════════════════════════════
+
+1. Go to razorpay.com → sign up free
+2. Go to Settings → API Keys
+3. Generate Test Key
+4. Copy Key ID and Key Secret
+5. In test mode: no real money moves, use card 4111 1111 1111 1111
+6. Switch to Live mode when ready to accept real payments

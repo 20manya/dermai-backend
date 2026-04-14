@@ -8,7 +8,7 @@ Uses SQLite locally, easy to switch to PostgreSQL for production.
 import os
 from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
 # ── Database setup ────────────────────────────────────────────────────────────
